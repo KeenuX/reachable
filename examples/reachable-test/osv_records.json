@@ -1,0 +1,116 @@
+[
+  {
+    "id": "LOCAL-REACHABLE-001",
+    "summary": "Sample reachable function",
+    "details": "The affected function is `demo_pkg.vulnerable()`.",
+    "severity": "high",
+    "affected": [
+      {
+        "package": {
+          "ecosystem": "PyPI",
+          "name": "demo-pkg"
+        },
+        "ranges": [
+          {
+            "type": "ECOSYSTEM",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "2.0.0"
+              }
+            ]
+          }
+        ],
+        "database_specific": {
+          "affected_functions": [
+            "demo_pkg.vulnerable"
+          ]
+        }
+      }
+    ],
+    "references": [
+      {
+        "type": "ADVISORY",
+        "url": "https://example.invalid/LOCAL-REACHABLE-001"
+      }
+    ]
+  },
+  {
+    "id": "LOCAL-NOT-PROVEN-002",
+    "summary": "Sample unused function",
+    "details": "The affected function is `unused_pkg.vulnerable()`.",
+    "severity": "medium",
+    "affected": [
+      {
+        "package": {
+          "ecosystem": "PyPI",
+          "name": "unused-pkg"
+        },
+        "ranges": [
+          {
+            "type": "ECOSYSTEM",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "2.0.0"
+              }
+            ]
+          }
+        ],
+        "database_specific": {
+          "affected_functions": [
+            "unused_pkg.vulnerable"
+          ]
+        }
+      }
+    ],
+    "references": [
+      {
+        "type": "ADVISORY",
+        "url": "https://example.invalid/LOCAL-NOT-PROVEN-002"
+      }
+    ]
+  },
+  {
+    "id": "LOCAL-UNKNOWN-003",
+    "summary": "Sample dynamic dispatch",
+    "details": "The affected function is `dynamic_pkg.load()`.",
+    "severity": "high",
+    "affected": [
+      {
+        "package": {
+          "ecosystem": "PyPI",
+          "name": "dynamic-pkg"
+        },
+        "ranges": [
+          {
+            "type": "ECOSYSTEM",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "2.0.0"
+              }
+            ]
+          }
+        ],
+        "database_specific": {
+          "affected_functions": [
+            "dynamic_pkg.load"
+          ]
+        }
+      }
+    ],
+    "references": [
+      {
+        "type": "ADVISORY",
+        "url": "https://example.invalid/LOCAL-UNKNOWN-003"
+      }
+    ]
+  }
+]

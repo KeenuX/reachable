@@ -56,9 +56,22 @@ To provide offline advisories, include one of these in the selected project:
 
 Alternatively set `REACHABLE_OSV_CACHE` to a local cached OSV JSON file. If no inventory is supplied, reachable returns a completed empty result and explains that no advisory inventory was provided; it never applies the demo cache to an unrelated project.
 
-### Try the prepared Desktop sample
+### Try the prepared sample project
 
-A small sample folder named `reachable-test` has been created on the Desktop for this workspace. It is outside the repository so it can be selected like a real user project. In the dashboard:
+The prepared sample is included in this repository at:
+
+```text
+examples/reachable-test
+```
+
+To place a copy on your real Windows Desktop, run this in **PowerShell** from the repository root:
+
+```powershell
+$desktop = [Environment]::GetFolderPath('Desktop')
+Copy-Item -Recurse -Force .\examples\reachable-test (Join-Path $desktop 'reachable-test')
+```
+
+This copy step matters when the app is running in Docker: the browser's folder picker can then select the sample like any other local project. In the dashboard:
 
 1. Click **Choose folder**.
 2. Select the Desktop folder named `reachable-test`.
@@ -72,10 +85,10 @@ The sample contains `app.py`, `dynamic.py`, `requirements.txt`, `pyproject.toml`
 
 The expected summary is **3 alerts: 1 reachable, 1 not proven reachable, 1 unknown**. The packages are fictional and do not need to be installed because reachable analyzes source and offline advisory data only.
 
-For a same-machine CLI check, replace the placeholder with the actual path to your Desktop sample:
+For a same-machine CLI check, use the actual Desktop path printed by PowerShell:
 
-```sh
-reachable scan "/path/to/Desktop/reachable-test"
+```powershell
+reachable scan (Join-Path ([Environment]::GetFolderPath('Desktop')) 'reachable-test')
 ```
 
 A reachable finding makes the CLI exit with status `1`; that is expected for this sample.

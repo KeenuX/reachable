@@ -1,0 +1,9 @@
+[project]
+name = "reachable-test-project"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "demo-pkg==1.0.0",
+  "unused-pkg==1.0.0",
+  "dynamic-pkg==1.0.0",
+]
