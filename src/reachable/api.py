@@ -88,10 +88,15 @@ def _dependencies(project: Path, advisories: list[Any], demo: bool = False) -> d
                 imported.update(alias.name.split(".")[0].replace("_", "-") for alias in node.names)
             elif isinstance(node, ast.ImportFrom) and node.module:
                 imported.add(node.module.split(".")[0].replace("_", "-"))
-    for advisory in advisories:
-        package = advisory.package
-        if package not in result and package.replace("_", "-") in imported:
-            result[package] = {"direct": False}
+    # If a project declares dependencies, an imported package missing from that
+    # declaration is conservatively treated as transitive. Source-only demo
+    # projects have no declaration, so their imported packages remain direct.
+    if pyproject.is_file():
+        declared = {str(name).replace("_", "-").lower() for name in result}
+        for advisory in advisories:
+            package = advisory.package
+            if package.lower().replace("_", "-") in imported and package.lower().replace("_", "-") not in declared:
+                result[package] = {"direct": False}
     if demo:
         result.update({"transitivelib": {"direct": False}, "parent-pkg": {"direct": False}})
     return result
