@@ -37,7 +37,24 @@ On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1`; the package a
 make run
 ```
 
-The server is expected to bind to `127.0.0.1` and serve the dashboard at `http://127.0.0.1:8000`. Configuration defaults are documented in `.env.example`.
+The server is expected to bind to `127.0.0.1` and serve the dashboard at `http://127.0.0.1:8000`. Configuration defaults are documented in `.env.example`. The demo is a real server-side analysis of the bundled fixture and offline advisory records; the browser does not substitute synthetic results when the API is unavailable.
+
+## Analyze another project
+
+Use **Choose folder** in the dashboard to open your operating system's folder picker. The browser uploads supported Python source and project metadata to the local server; the server stores it in a temporary directory, analyzes it without importing or executing it, and removes it before returning the result. This is the portable workflow when the dashboard is running inside Docker.
+
+For a same-machine checkout, you can also type its path into the path field or use the CLI:
+
+```sh
+reachable scan ./path/to/project
+```
+
+To provide offline advisories, include one of these in the selected project:
+
+- `osv_records.json` or `osv.json` using an OSV-shaped record list, `{"records": [...]}`, or `{"vulnerabilities": [...]}`.
+- `pip-audit.json` saved from `pip-audit --format=json`; it is read as data and does not cause reachable to execute pip-audit or the target project.
+
+Alternatively set `REACHABLE_OSV_CACHE` to a local cached OSV JSON file. If no inventory is supplied, reachable returns a completed empty result and explains that no advisory inventory was provided; it never applies the demo cache to an unrelated project.
 
 ## Test
 

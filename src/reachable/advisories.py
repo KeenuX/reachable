@@ -94,7 +94,84 @@ def _package_data(record: Mapping[str, Any]) -> tuple[str, str]:
     package = record.get("package")
     if isinstance(package, Mapping):
         return str(package.get("name", "")), str(package.get("ecosystem", "PyPI"))
-    return str(package or record.get("project", "")), "PyPI"
+    return str(package or record.get("project") or record.get("name", "")), str(record.get("ecosystem", "PyPI"))
+
+
+def _first_text(value: Any) -> str | None:
+    """Return a useful scalar from OSV's several extension shapes."""
+
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    if isinstance(value, Mapping):
+        for key in ("label", "severity", "score", "value"):
+            found = _first_text(value.get(key))
+            if found:
+                return found
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            found = _first_text(item)
+            if found:
+                return found
+    return None
+
+
+def _record_severity(record: Mapping[str, Any]) -> str | None:
+    """Extract a displayable severity without interpreting CVSS scores."""
+
+    candidates: list[Any] = [record.get("severity")]
+    database_specific = record.get("database_specific")
+    if isinstance(database_specific, Mapping):
+        candidates.extend((database_specific.get("severity"), database_specific.get("severity_label")))
+    for affected in record.get("affected") or []:
+        if not isinstance(affected, Mapping):
+            continue
+        for section_name in ("database_specific", "ecosystem_specific"):
+            section = affected.get(section_name)
+            if isinstance(section, Mapping):
+                candidates.extend((section.get("severity"), section.get("severity_label")))
+    found = next((found for candidate in candidates if (found := _first_text(candidate))), None)
+    if not found:
+        return None
+    normalized = found.strip().lower()
+    aliases = {"moderate": "medium", "informational": "low"}
+    normalized = aliases.get(normalized, normalized)
+    return normalized if normalized in {"critical", "high", "medium", "low", "unknown"} else "unknown"
+
+
+def _record_fixed_version(record: Mapping[str, Any]) -> str | None:
+    """Return the first explicit fixed version in an OSV range."""
+
+    candidates: list[Any] = [record.get("fixed_version"), record.get("fixed"), record.get("fix_versions")]
+    database_specific = record.get("database_specific")
+    if isinstance(database_specific, Mapping):
+        candidates.extend((database_specific.get("fixed_version"), database_specific.get("fixed")))
+    for affected in record.get("affected") or []:
+        if not isinstance(affected, Mapping):
+            continue
+        for section_name in ("database_specific", "ecosystem_specific"):
+            section = affected.get(section_name)
+            if isinstance(section, Mapping):
+                candidates.extend((section.get("fixed_version"), section.get("fixed")))
+        ranges = affected.get("ranges") or []
+        if not isinstance(ranges, list):
+            continue
+        for version_range in ranges:
+            if not isinstance(version_range, Mapping):
+                continue
+            events = version_range.get("events") or []
+            if not isinstance(events, list):
+                continue
+            for event in events:
+                if isinstance(event, Mapping):
+                    candidates.append(event.get("fixed"))
+    for candidate in candidates:
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+        if isinstance(candidate, (list, tuple)):
+            for nested in candidate:
+                if isinstance(nested, str) and nested.strip():
+                    return nested.strip()
+    return None
 
 
 def normalize_osv_record(record: Mapping[str, Any]) -> Advisory:
@@ -112,21 +189,34 @@ def normalize_osv_record(record: Mapping[str, Any]) -> Advisory:
     if not isinstance(database_specific, dict):
         database_specific = {}
     structured = _structured_symbols(record, package)
-    aliases = [str(item) for item in record.get("aliases", []) if isinstance(item, str)]
-    references = [
-        str(item["url"])
-        for item in record.get("references", [])
-        if isinstance(item, Mapping) and isinstance(item.get("url"), str)
-    ]
+    aliases_value = record.get("aliases", [])
+    if isinstance(aliases_value, str):
+        aliases_value = [aliases_value]
+    if not isinstance(aliases_value, (list, tuple, set)):
+        aliases_value = []
+    aliases = [str(item) for item in aliases_value if isinstance(item, str)]
+    references = []
+    for item in record.get("references", []) or []:
+        if isinstance(item, Mapping) and isinstance(item.get("url"), str):
+            references.append(str(item["url"]))
+        elif isinstance(item, str):
+            references.append(item)
+    for item in record.get("urls", []) or []:
+        if isinstance(item, str) and item not in references:
+            references.append(item)
+    affected_value = record.get("affected") or []
+    affected = affected_value if isinstance(affected_value, list) else []
     return Advisory(
         id=str(record.get("id") or (aliases[0] if aliases else "unknown")),
         package=package,
         ecosystem=ecosystem,
         aliases=aliases,
-        summary=str(record.get("summary") or ""),
-        details=str(record.get("details") or ""),
+        summary=str(record.get("summary") or record.get("description") or ""),
+        details=str(record.get("details") or record.get("description") or ""),
         references=references,
-        affected=list(record.get("affected") or []),
+        severity=_record_severity(record),
+        fixed_version=_record_fixed_version(record),
+        affected=affected,
         structured_symbols=structured,
         database_specific=database_specific,
         raw=dict(record),
@@ -137,7 +227,9 @@ def normalize_osv_cache(payload: Any) -> list[Advisory]:
     """Normalize an OSV response, cache export, or list of records."""
 
     if isinstance(payload, Mapping):
-        records = payload.get("vulnerabilities")
+        records = payload.get("records")
+        if records is None:
+            records = payload.get("vulnerabilities")
         if records is None:
             records = payload.get("results")
         if records is None and "id" in payload:
@@ -145,7 +237,7 @@ def normalize_osv_cache(payload: Any) -> list[Advisory]:
     else:
         records = payload
     if not isinstance(records, list):
-        raise ValueError("OSV cache must contain a vulnerabilities list")
+        raise ValueError("OSV cache must contain a records list")
     return [normalize_osv_record(record) for record in records if isinstance(record, Mapping)]
 
 
@@ -157,7 +249,11 @@ def load_osv_cache(path: str | Path) -> list[Advisory]:
 
 
 def _curated_entries(curated_map: Mapping[str, Any], package: str) -> tuple[list[str], str | None]:
-    value = curated_map.get(package, {})
+    normalized = package.strip().lower().replace("-", "_").replace(".", "_")
+    value = curated_map.get(package)
+    if value is None:
+        value = next((candidate for key, candidate in curated_map.items()
+                      if str(key).strip().lower().replace("-", "_").replace(".", "_") == normalized), {})
     if isinstance(value, list):
         return [str(item) for item in value], None
     if not isinstance(value, Mapping):

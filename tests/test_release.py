@@ -62,3 +62,18 @@ def test_analyzer_does_not_follow_source_symlinks(tmp_path):
     result = analyze_project(tmp_path, [advisory])
     assert result.findings[0].status.value == "NOT_PROVEN_REACHABLE"
     assert all("outside.py" not in evidence.file for evidence in result.findings[0].evidence)
+
+
+def test_cli_scan_unrelated_project_returns_empty_json_without_traceback(tmp_path, capsys):
+    from reachable.cli import _scan
+
+    (tmp_path / "app.py").write_text("print('source is never executed')\n", encoding="utf-8")
+
+    assert _scan(tmp_path) == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["summary"] == {
+        "total": 0,
+        "reachable": 0,
+        "not_proven_reachable": 0,
+        "unknown": 0,
+    }

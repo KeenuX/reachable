@@ -3,3 +3,6 @@ name = "reachable-demo-app"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = ["vulnerable-pkg==1.0.0", "unrelated-pkg==1.0.0"]
+
+[project.scripts]
+demo-reachable = "app:routed_call"

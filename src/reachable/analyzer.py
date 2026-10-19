@@ -1,14 +1,18 @@
 """Conservative, import-free Python reachability analysis.
 
-Only :mod:`ast` is used to inspect the target project. Target modules are
-never imported, compiled, or executed; unresolved behavior is surfaced as
-``UNKNOWN`` rather than guessed.
+Python source is inspected with :mod:`ast` and declarative metadata is read
+with standard-library parsers. Target modules are never imported, compiled,
+or executed; unresolved behavior is surfaced as ``UNKNOWN`` rather than
+guessed.
 """
 
 from __future__ import annotations
 
 import ast
+import configparser
 import os
+import re
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping
@@ -27,6 +31,354 @@ from .models import (
 
 _SKIP_DIRS = {".git", ".venv", "venv", "env", "__pycache__", "node_modules", ".tox"}
 _DYNAMIC_NAMES = {"eval", "exec", "getattr", "__import__", "compile"}
+_REQUIREMENT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*")
+_EXACT_VERSION = re.compile(r"(?:^|,)\s*={2,3}\s*([^\s,;]+)")
+
+
+def _canonical_requirement_name(value: str) -> str:
+    return value.strip().lower().replace("-", "_").replace(".", "_")
+
+
+def _safe_file(path: Path, root: Path) -> Path | None:
+    """Resolve a metadata file only when it remains inside ``root``."""
+
+    if path.is_symlink() or not path.is_file():
+        return None
+    try:
+        resolved = path.resolve(strict=True)
+        resolved.relative_to(root.resolve())
+    except (OSError, RuntimeError, ValueError):
+        return None
+    return resolved
+
+
+def _load_pyproject(root: Path) -> dict[str, Any]:
+    path = _safe_file(root / "pyproject.toml", root)
+    if path is None:
+        return {}
+    try:
+        with path.open("rb") as handle:
+            payload = tomllib.load(handle)
+    except (OSError, tomllib.TOMLDecodeError):
+        # Metadata is optional input. A malformed or unsupported file must not
+        # cause target code to be imported or executed as a recovery strategy.
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _dependency_value(
+    dependencies: dict[str, dict[str, Any]],
+    raw_name: str,
+    *,
+    specifier: str = "",
+    source: str,
+    direct: bool = True,
+    optional: bool = False,
+) -> None:
+    name = raw_name.strip()
+    if not name or _canonical_requirement_name(name) in {"python", "python_version"}:
+        return
+    existing = dependencies.setdefault(
+        name,
+        {
+            "name": name,
+            "direct": direct,
+            "declared": True,
+            "optional": optional,
+            "specifier": "",
+            "installed_version": None,
+            "sources": [],
+        },
+    )
+    existing["direct"] = bool(existing.get("direct", direct) and direct)
+    existing["optional"] = bool(existing.get("optional", False) or optional)
+    if source not in existing["sources"]:
+        existing["sources"].append(source)
+    specifier = str(specifier or "").strip()
+    if specifier and not existing.get("specifier"):
+        existing["specifier"] = specifier
+    if existing.get("installed_version") is None:
+        match = _EXACT_VERSION.search(specifier)
+        if match:
+            existing["installed_version"] = match.group(1)
+
+
+def _requirement_parts(raw: Any) -> tuple[str, str] | None:
+    if not isinstance(raw, str):
+        return None
+    line = raw.strip()
+    if not line or line.startswith("#"):
+        return None
+    if " #" in line:
+        line = line.split(" #", 1)[0].rstrip()
+    if line.startswith("-e "):
+        line = line[3:].strip()
+    egg_match = re.search(r"[#&]egg=([A-Za-z0-9][A-Za-z0-9_.-]*)", line)
+    if egg_match and (line.startswith(("git+", "hg+", "svn+", "bzr+", "http://", "https://"))):
+        return egg_match.group(1), ""
+    if line.startswith(("-", "--")):
+        return None
+    match = _REQUIREMENT_NAME.match(line)
+    if not match:
+        return None
+    name = match.group(0)
+    return name, line[match.end():].strip()
+
+
+def _requirement_lines(text: str) -> list[str]:
+    lines: list[str] = []
+    current = ""
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if current:
+            current += " " + line
+        else:
+            current = line
+        if current.endswith("\\"):
+            current = current[:-1].rstrip()
+            continue
+        lines.append(current)
+        current = ""
+    if current:
+        lines.append(current)
+    return lines
+
+
+def _read_requirements_file(
+    path: Path,
+    root: Path,
+    dependencies: dict[str, dict[str, Any]],
+    seen: set[Path],
+) -> None:
+    resolved = _safe_file(path, root)
+    if resolved is None or resolved in seen:
+        return
+    seen.add(resolved)
+    try:
+        text = resolved.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return
+    for line in _requirement_lines(text):
+        include_match = re.match(r"^(?:-r|--requirement)\s+(.+)$", line)
+        constraint_match = re.match(r"^(?:-c|--constraint)\s+(.+)$", line)
+        if include_match or constraint_match:
+            included = include_match or constraint_match
+            include_path = (resolved.parent / included.group(1).strip()).resolve()
+            _read_requirements_file(include_path, root, dependencies, seen)
+            continue
+        parts = _requirement_parts(line)
+        if parts:
+            name, specifier = parts
+            _dependency_value(dependencies, name, specifier=specifier, source=resolved.name)
+
+
+def _literal_assignment_values(tree: ast.AST) -> dict[str, Any]:
+    values: dict[str, Any] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            targets = [target for target in node.targets if isinstance(target, ast.Name)]
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            targets = [node.target]
+        else:
+            continue
+        try:
+            value = ast.literal_eval(node.value)
+        except (ValueError, TypeError, SyntaxError):
+            continue
+        for target in targets:
+            values[target.id] = value
+    return values
+
+
+def _setup_py_dependencies(root: Path, dependencies: dict[str, dict[str, Any]]) -> None:
+    path = _safe_file(root / "setup.py", root)
+    if path is None:
+        return
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=path.name)
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        return
+    values = _literal_assignment_values(tree)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, (ast.Name, ast.Attribute)):
+            continue
+        function_name = node.func.id if isinstance(node.func, ast.Name) else node.func.attr
+        if function_name != "setup":
+            continue
+        for keyword in node.keywords:
+            if keyword.arg not in {"install_requires", "extras_require"}:
+                continue
+            value: Any
+            try:
+                value = ast.literal_eval(keyword.value)
+            except (ValueError, TypeError, SyntaxError):
+                value = values.get(keyword.value.id) if isinstance(keyword.value, ast.Name) else None
+            if keyword.arg == "install_requires":
+                entries = value if isinstance(value, (list, tuple, set)) else []
+                for entry in entries:
+                    parts = _requirement_parts(entry)
+                    if parts:
+                        _dependency_value(dependencies, parts[0], specifier=parts[1], source="setup.py")
+            elif isinstance(value, Mapping):
+                for entries in value.values():
+                    if isinstance(entries, str):
+                        entries = [entries]
+                    if not isinstance(entries, (list, tuple, set)):
+                        continue
+                    for entry in entries:
+                        parts = _requirement_parts(entry)
+                        if parts:
+                            _dependency_value(dependencies, parts[0], specifier=parts[1], source="setup.py", optional=True)
+
+
+def discover_dependencies(project_root: str | os.PathLike[str]) -> dict[str, dict[str, Any]]:
+    """Read dependency declarations without importing or executing a project.
+
+    The returned values retain the source and exact pinned version when the
+    declaration provides one. Unsupported dynamic metadata is ignored rather
+    than evaluated.
+    """
+
+    root = Path(project_root).resolve()
+    if not root.is_dir():
+        return {}
+    dependencies: dict[str, dict[str, Any]] = {}
+    pyproject = _load_pyproject(root)
+    project = pyproject.get("project")
+    if isinstance(project, Mapping):
+        for entry in project.get("dependencies", []) or []:
+            parts = _requirement_parts(entry)
+            if parts:
+                _dependency_value(dependencies, parts[0], specifier=parts[1], source="pyproject.toml")
+        optional = project.get("optional-dependencies")
+        if isinstance(optional, Mapping):
+            for entries in optional.values():
+                if isinstance(entries, str):
+                    entries = [entries]
+                if not isinstance(entries, (list, tuple)):
+                    continue
+                for entry in entries:
+                    parts = _requirement_parts(entry)
+                    if parts:
+                        _dependency_value(
+                            dependencies,
+                            parts[0],
+                            specifier=parts[1],
+                            source="pyproject.toml",
+                            optional=True,
+                        )
+
+    # Poetry and PDM tables are declarative TOML and can be read safely too.
+    tool = pyproject.get("tool")
+    if isinstance(tool, Mapping):
+        poetry = tool.get("poetry")
+        poetry_dependencies: list[Mapping[str, Any]] = []
+        if isinstance(poetry, Mapping):
+            if isinstance(poetry.get("dependencies"), Mapping):
+                poetry_dependencies.append(poetry["dependencies"])
+            groups = poetry.get("group")
+            if isinstance(groups, Mapping):
+                for group in groups.values():
+                    if isinstance(group, Mapping) and isinstance(group.get("dependencies"), Mapping):
+                        poetry_dependencies.append(group["dependencies"])
+        for table in poetry_dependencies:
+            for name, value in table.items():
+                if _canonical_requirement_name(str(name)) == "python":
+                    continue
+                if isinstance(value, str):
+                    specifier = value
+                elif isinstance(value, Mapping):
+                    specifier = str(value.get("version") or "")
+                else:
+                    specifier = ""
+                _dependency_value(dependencies, str(name), specifier=specifier, source="pyproject.toml")
+        pdm = tool.get("pdm")
+        if isinstance(pdm, Mapping):
+            table = pdm.get("dependencies")
+            if isinstance(table, Mapping):
+                for name, value in table.items():
+                    specifier = str(value) if isinstance(value, str) else ""
+                    _dependency_value(dependencies, str(name), specifier=specifier, source="pyproject.toml")
+            dev_tables = pdm.get("dev-dependencies")
+            if isinstance(dev_tables, Mapping):
+                for entries in dev_tables.values():
+                    if isinstance(entries, str):
+                        entries = [entries]
+                    if not isinstance(entries, (list, tuple)):
+                        continue
+                    for entry in entries:
+                        parts = _requirement_parts(entry)
+                        if parts:
+                            _dependency_value(
+                                dependencies,
+                                parts[0],
+                                specifier=parts[1],
+                                source="pyproject.toml",
+                                optional=True,
+                            )
+
+    for path in sorted(root.rglob("requirements*.txt")):
+        if any(part in _SKIP_DIRS for part in path.relative_to(root).parts):
+            continue
+        _read_requirements_file(path, root, dependencies, set())
+
+    setup_cfg = _safe_file(root / "setup.cfg", root)
+    if setup_cfg is not None:
+        parser = configparser.RawConfigParser()
+        try:
+            parser.read_string(setup_cfg.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, configparser.Error):
+            parser = configparser.RawConfigParser()
+        if parser.has_option("options", "install_requires"):
+            for entry in _requirement_lines(parser.get("options", "install_requires")):
+                parts = _requirement_parts(entry)
+                if parts:
+                    _dependency_value(dependencies, parts[0], specifier=parts[1], source="setup.cfg")
+        if parser.has_section("options.extras_require"):
+            for _, raw_entries in parser.items("options.extras_require"):
+                for entry in _requirement_lines(raw_entries):
+                    parts = _requirement_parts(entry)
+                    if parts:
+                        _dependency_value(
+                            dependencies,
+                            parts[0],
+                            specifier=parts[1],
+                            source="setup.cfg",
+                            optional=True,
+                        )
+
+    _setup_py_dependencies(root, dependencies)
+    return dependencies
+
+
+def discover_console_scripts(project_root: str | os.PathLike[str]) -> dict[str, str]:
+    """Discover declarative console scripts from ``pyproject.toml``."""
+
+    pyproject = _load_pyproject(Path(project_root).resolve())
+    scripts: dict[str, str] = {}
+    project = pyproject.get("project")
+    if isinstance(project, Mapping):
+        values = project.get("scripts")
+        if isinstance(values, Mapping):
+            scripts.update({str(name): str(target) for name, target in values.items() if isinstance(target, str)})
+        entry_points = project.get("entry-points")
+        if isinstance(entry_points, Mapping):
+            console = entry_points.get("console_scripts")
+            if isinstance(console, Mapping):
+                scripts.update({str(name): str(target) for name, target in console.items() if isinstance(target, str)})
+    tool = pyproject.get("tool")
+    if isinstance(tool, Mapping):
+        poetry = tool.get("poetry")
+        poetry_scripts = poetry.get("scripts") if isinstance(poetry, Mapping) else None
+        if isinstance(poetry_scripts, Mapping):
+            for name, target in poetry_scripts.items():
+                if isinstance(target, str):
+                    scripts.setdefault(str(name), target)
+                elif isinstance(target, Mapping) and isinstance(target.get("call"), str):
+                    scripts.setdefault(str(name), str(target["call"]))
+    return scripts
 
 
 @dataclass
@@ -69,7 +421,7 @@ def _relative_module(current: str, level: int, module: str | None) -> str:
 
 
 def _package_key(value: str) -> str:
-    return value.strip().lower().replace("-", "_")
+    return value.strip().lower().replace("-", "_").replace(".", "_")
 
 
 def _attribute_text(node: ast.AST) -> str | None:
@@ -82,6 +434,11 @@ def _attribute_text(node: ast.AST) -> str | None:
 
 
 def _decorator_text(node: ast.AST) -> str:
+    # Route decorators commonly arrive as a Call node, for example
+    # ``@app.get(\"/reports\")``. Resolve the callable part without
+    # evaluating decorator arguments.
+    if isinstance(node, ast.Call):
+        node = node.func
     return _attribute_text(node) or ""
 
 
@@ -197,7 +554,9 @@ class _CallVisitor(ast.NodeVisitor):
 def _module_name(root: Path, path: Path) -> str:
     relative = path.relative_to(root).with_suffix("")
     parts = list(relative.parts)
-    if parts[-1] == "__init__":
+    if parts and parts[0] == "src" and (root / "src").is_dir():
+        parts = parts[1:]
+    if parts and parts[-1] == "__init__":
         parts.pop()
     return ".".join(parts) or path.stem
 
@@ -286,6 +645,10 @@ def _parse_project(root: Path, include_tests: bool) -> tuple[list[_Module], list
         relative_parts = resolved_path.relative_to(root).parts
         if any(part in _SKIP_DIRS for part in relative_parts):
             continue
+        if resolved_path.name == "setup.py":
+            # Packaging metadata is parsed separately as literals; it is not
+            # an application entry point or a runtime module.
+            continue
         if not include_tests and ("tests" in relative_parts or resolved_path.name.startswith("test_")):
             continue
         relative = resolved_path.relative_to(root).as_posix()
@@ -308,14 +671,71 @@ def _parse_project(root: Path, include_tests: bool) -> tuple[list[_Module], list
     return modules, parse_errors
 
 
+def build_analysis_dependencies(
+    project_root: str | os.PathLike[str],
+    *,
+    include_tests: bool = False,
+) -> dict[str, dict[str, Any]]:
+    """Combine declared dependencies with imports without executing code.
+
+    Declared packages remain direct. Imports missing from a declared inventory
+    are represented as transitive when declarations exist; source-only projects
+    keep them as unknown-directness so a local advisory can still be analyzed.
+    """
+    root = Path(project_root).resolve()
+    dependencies = discover_dependencies(root)
+    imported = discover_imported_packages(root, include_tests=include_tests)
+    has_declarations = bool(dependencies)
+    for package in imported:
+        if any(_package_key(str(name)) == package for name in dependencies):
+            continue
+        dependencies[package] = {
+            "name": package,
+            "direct": False if has_declarations else None,
+            "declared": False,
+            "imported": True,
+            "installed_version": None,
+            "specifier": "",
+            "sources": ["source-import"],
+        }
+    return dependencies
+
+
+def discover_imported_packages(
+    project_root: str | os.PathLike[str],
+    *,
+    include_tests: bool = False,
+) -> set[str]:
+    """Return normalized top-level imports found by the AST scanner."""
+
+    root = Path(project_root).resolve()
+    if not root.is_dir():
+        return set()
+    modules, _ = _parse_project(root, include_tests)
+    return {
+        package
+        for module in modules
+        for package in module.imported_packages
+        if package
+    }
+
+
 def _symbol_matches(target: str | None, vulnerable: str) -> bool:
     if not target:
         return False
     return target == vulnerable or target.startswith(vulnerable + ".")
 
 
-def _entry_definitions(modules: list[_Module]) -> dict[str, Evidence]:
+def _entry_definitions(
+    modules: list[_Module],
+    console_scripts: Mapping[str, str] | None = None,
+) -> dict[str, Evidence]:
     roots: dict[str, Evidence] = {}
+    definitions = {
+        definition.qualified: definition
+        for module in modules
+        for definition in module.definitions.values()
+    }
     for module in modules:
         for definition in module.definitions.values():
             if _is_route(definition):
@@ -325,22 +745,35 @@ def _entry_definitions(modules: list[_Module]) -> dict[str, Evidence]:
         for statement in module.tree.body:
             if isinstance(statement, ast.If) and _is_main_guard(statement):
                 roots[module.name] = Evidence(module.path, statement.lineno, module.name, "entry", "__main__ guard")
-    # Source-only fixture projects and small scripts often expose a function
-    # without a framework decorator or a __main__ block. Treating top-level
-    # functions as fallback entries is conservative for this v1 graph: it can
-    # prove a direct call inside the function, but never invents a caller hop.
-    if not roots:
-        for module in modules:
-            for definition in module.definitions.values():
-                if isinstance(definition.node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    roots.setdefault(definition.qualified, Evidence(
-                        definition.path, definition.line, definition.qualified, "entry", "top-level function fallback"
-                    ))
+    for script_name, raw_target in (console_scripts or {}).items():
+        target = str(raw_target).strip()
+        if ":" not in target:
+            continue
+        module_name, function_name = target.split(":", 1)
+        function_name = function_name.split("[", 1)[0].strip().removesuffix("()")
+        qualified = ".".join(part for part in (module_name.strip(), function_name) if part)
+        definition = definitions.get(qualified)
+        if definition is None:
+            continue
+        roots.setdefault(
+            qualified,
+            Evidence(
+                definition.path,
+                definition.line,
+                qualified,
+                "entry",
+                f"console script: {script_name}",
+            ),
+        )
     return roots
 
 
-def _find_chain(modules: list[_Module], vulnerable: list[str]) -> tuple[list[Evidence], Evidence | None]:
-    roots = _entry_definitions(modules)
+def _find_chain(
+    modules: list[_Module],
+    vulnerable: list[str],
+    console_scripts: Mapping[str, str] | None = None,
+) -> tuple[list[Evidence], Evidence | None]:
+    roots = _entry_definitions(modules, console_scripts)
     calls_by_origin: dict[str, list[_Call]] = {}
     for module in modules:
         for call in module.calls:
@@ -375,10 +808,12 @@ def _find_chain(modules: list[_Module], vulnerable: list[str]) -> tuple[list[Evi
 
 
 def _coerce_advisories(advisories: Any) -> list[Advisory]:
+    if advisories is None:
+        return []
     if isinstance(advisories, Advisory):
         return [advisories]
     if isinstance(advisories, Mapping):
-        if "vulnerabilities" in advisories or "results" in advisories:
+        if "records" in advisories or "vulnerabilities" in advisories or "results" in advisories:
             return normalize_osv_cache(advisories)
         return [normalize_osv_record(advisories)]
     return [item if isinstance(item, Advisory) else normalize_osv_record(item) for item in advisories]
@@ -397,6 +832,21 @@ def _dependency_is_transitive(dependencies: Mapping[str, Any] | None, package: s
     return value is False or value == "transitive"
 
 
+def _installed_version(dependencies: Mapping[str, Any] | None, package: str) -> str | None:
+    if not dependencies:
+        return None
+    wanted = _package_key(package)
+    for name, value in dependencies.items():
+        if _package_key(str(name)) != wanted:
+            continue
+        if isinstance(value, str):
+            return value
+        if isinstance(value, Mapping):
+            version = value.get("installed_version") or value.get("version")
+            return str(version) if version is not None else None
+    return None
+
+
 def analyze_project(
     project_root: str | os.PathLike[str],
     advisories: Any,
@@ -405,6 +855,7 @@ def analyze_project(
     symbol_map_path: str | os.PathLike[str] | None = None,
     dependencies: Mapping[str, Any] | None = None,
     include_tests: bool = False,
+    console_scripts: Mapping[str, str] | None = None,
 ) -> AnalysisResult:
     """Analyze Python source against normalized or raw offline OSV records."""
 
@@ -412,6 +863,10 @@ def analyze_project(
     if not root.is_dir():
         raise ValueError(f"project root is not a directory: {project_root}")
     modules, parse_errors = _parse_project(root, include_tests)
+    if dependencies is None:
+        dependencies = build_analysis_dependencies(root, include_tests=include_tests)
+    if console_scripts is None:
+        console_scripts = discover_console_scripts(root)
     dynamic = [evidence for module in modules for evidence in module.dynamic]
     imported: dict[str, Evidence] = {}
     for module in modules:
@@ -429,6 +884,14 @@ def analyze_project(
             symbol_source=source,
             symbol=symbol_names[0] if symbol_names else None,
             summary=advisory.summary,
+            advisory_text=advisory.details or advisory.summary,
+            installed_version=(
+                _installed_version(dependencies, advisory.package)
+                or (str(advisory.raw.get("version")) if advisory.raw.get("version") else None)
+            ),
+            severity=advisory.severity,
+            fixed_version=advisory.fixed_version,
+            references=list(advisory.references),
         )
         if not symbols:
             findings.append(Finding(
@@ -442,7 +905,7 @@ def analyze_project(
             ))
             continue
         if _dependency_is_transitive(dependencies, advisory.package):
-            evidence = imported.get(advisory.package)
+            evidence = imported.get(_package_key(advisory.package))
             findings.append(Finding(
                 status=Status.UNKNOWN,
                 reason=ReasonCode.TRANSITIVE_DEPENDENCY,
@@ -453,7 +916,7 @@ def analyze_project(
                 **common,
             ))
             continue
-        chain, vulnerable_edge = _find_chain(modules, symbol_names)
+        chain, vulnerable_edge = _find_chain(modules, symbol_names, console_scripts)
         if chain:
             findings.append(Finding(
                 status=Status.REACHABLE,

@@ -100,6 +100,8 @@ class Advisory:
     structured_symbols: list[str] = field(default_factory=list)
     database_specific: dict[str, Any] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
+    severity: str | None = None
+    fixed_version: str | None = None
 
     @property
     def text(self) -> str:
@@ -118,6 +120,8 @@ class Advisory:
             "summary": self.summary,
             "details": self.details,
             "references": list(self.references),
+            "severity": self.severity,
+            "fixed_version": self.fixed_version,
             "affected": self.affected,
             "structured_symbols": list(self.structured_symbols),
             "database_specific": self.database_specific,
@@ -136,9 +140,14 @@ class Finding:
     symbol_source: SymbolSource
     symbol: str | None = None
     summary: str = ""
+    advisory_text: str = ""
     evidence: list[Evidence] = field(default_factory=list)
     call_chain: list[Evidence] = field(default_factory=list)
     message: str = ""
+    installed_version: str | None = None
+    severity: str | None = None
+    fixed_version: str | None = None
+    references: list[str] = field(default_factory=list)
 
     @property
     def reason_code(self) -> ReasonCode:

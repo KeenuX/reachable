@@ -6,8 +6,8 @@ import json
 import os
 from pathlib import Path
 
-from .advisories import load_osv_cache
-from .analyzer import analyze_project
+from .advisories import load_osv_cache, normalize_osv_cache
+from .analyzer import analyze_project, build_analysis_dependencies
 from .config import setting
 
 PACKAGE_ASSETS = Path(__file__).resolve().parent / "assets"
@@ -29,13 +29,29 @@ def _scan(path: Path) -> int:
     if not root.is_dir():
         raise SystemExit(f"project path is not a directory: {path}")
     base = _root()
-    cache_value = setting("REACHABLE_OSV_CACHE")
-    cache = Path(cache_value).expanduser() if cache_value else base / "data" / "osv_cache.json"
-    advisories = load_osv_cache(cache)
+    is_demo = root == (base / "fixtures" / "demo_app").resolve()
+    inventory = None
+    for name in ("osv_records.json", "osv.json", "pip-audit.json", "data/osv_records.json", "data/osv.json", "data/pip-audit.json"):
+        candidate = root / name
+        if candidate.is_file() and not candidate.is_symlink():
+            with candidate.open(encoding="utf-8") as handle:
+                inventory = normalize_osv_cache(json.load(handle))
+            break
+    if inventory is None:
+        cache_value = setting("REACHABLE_OSV_CACHE")
+        cache = Path(cache_value).expanduser() if cache_value else None
+        if cache is not None and cache.is_file() and not cache.is_symlink():
+            inventory = load_osv_cache(cache)
+    if inventory is None and is_demo:
+        inventory = load_osv_cache(base / "data" / "osv_cache.json")
+    advisories = inventory or []
+    dependencies = build_analysis_dependencies(root)
+    if is_demo:
+        dependencies["transitivelib"] = {"direct": False}
+    package_keys = {str(name).strip().lower().replace("-", "_").replace(".", "_") for name in dependencies}
+    if not is_demo:
+        advisories = [item for item in advisories if str(item.package).strip().lower().replace("-", "_").replace(".", "_") in package_keys]
     symbol_map = base / "data" / "symbol_map.json"
-    dependencies = None
-    if root == (base / "fixtures" / "demo_app").resolve():
-        dependencies = {"transitivelib": {"direct": False}}
     result = analyze_project(
         root,
         advisories,

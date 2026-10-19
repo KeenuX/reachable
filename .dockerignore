@@ -10,3 +10,6 @@ build
 dist
 *.egg-info
 .coverage
+design.md
+plan.md
+prompt.md
