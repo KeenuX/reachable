@@ -10,7 +10,7 @@ COPY requirements.lock pyproject.toml README.md ./
 RUN python -m pip install --no-cache-dir -r requirements.lock
 
 COPY . .
-RUN python -m pip install --no-cache-dir --no-deps .
+RUN python -m pip install --no-cache-dir --no-deps --no-build-isolation .
 
 EXPOSE 8000
 CMD ["reachable", "serve", "--demo"]
