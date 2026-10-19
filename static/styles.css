@@ -95,3 +95,6 @@ h1, h2, h3, p { margin-top: 0; } .hero-copy h1 { max-width: 690px; margin: 0; fo
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
 body.dark { --canvas: #1b1917; --surface: #24211e; --surface-raised: #2a2723; --surface-hover: #302c27; --pill: #373129; --ink: #eae4dc; --ink-soft: #c0b8ac; --muted: #9a9287; --sage: #9ab09a; --sage-deep: #b4c9b2; --terracotta: #df9a74; --terracotta-deep: #e5a17d; --sand: #796e60; --line-soft: rgba(234, 228, 220, .08); --shadow-soft: 0 12px 32px -8px rgba(0, 0, 0, .18), 0 4px 12px -2px rgba(0, 0, 0, .1); --shadow-float: 0 24px 48px -12px rgba(0, 0, 0, .3), 0 8px 20px -4px rgba(0, 0, 0, .14); }
 .dark .icon-sun { display: none; } .dark .icon-moon { display: block; } .dark .alert-table td { background: rgba(42, 39, 35, .48); } .dark .hero-note strong { color: var(--ink-soft); } .dark .drawer-backdrop { background: rgba(0, 0, 0, .46); }
+
+.cy-graph { min-height: 175px; width: 100%; border-radius: 16px; background: color-mix(in srgb, var(--surface) 76%, var(--accent-sand)); }
+.cy-graph + svg { display: none; }
