@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f7f4ee">
+    <meta name="description" content="Reachable — understand which dependency alerts your Python project can actually reach.">
+    <title>reachable · dependency reachability</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to analysis</a>
+    <div class="app-shell">
+      <header class="topbar" aria-label="Primary navigation">
+        <a class="brand" href="/" aria-label="reachable home">
+          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+          <span>reachable</span>
+        </a>
+        <div class="topbar-actions">
+          <span class="local-chip"><span class="pulse-dot" aria-hidden="true"></span> local-first</span>
+          <button class="icon-button" id="theme-toggle" type="button" aria-label="Switch to dark mode" title="Toggle dark mode">
+            <svg class="icon icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"></path></svg>
+            <svg class="icon icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.4 14.7A8.5 8.5 0 0 1 9.3 3.6 8.5 8.5 0 1 0 20.4 14.7Z"></path></svg>
+          </button>
+        </div>
+      </header>
+
+      <main id="main-content">
+        <section class="hero-section" aria-labelledby="hero-title">
+          <div class="hero-copy">
+            <p class="eyebrow">PYTHON DEPENDENCY ANALYSIS <span class="eyebrow-line"></span></p>
+            <h1 id="hero-title">See what your alerts<br><em>actually reach.</em></h1>
+            <p class="hero-lede">A calm, evidence-led view of dependency risk. reachable reads your code without running it, then shows the path behind every claim.</p>
+          </div>
+          <div class="hero-note" aria-label="Analysis principle">
+            <span class="note-pin" aria-hidden="true"></span>
+            <p>Static analysis<br><strong>honesty over certainty.</strong></p>
+          </div>
+        </section>
+
+        <section class="workspace-card" aria-labelledby="start-heading">
+          <div class="workspace-heading">
+            <div>
+              <p class="section-kicker">01 / START HERE</p>
+              <h2 id="start-heading">Bring a project into view</h2>
+            </div>
+            <span class="mono-label">offline by default</span>
+          </div>
+          <div class="analyze-form" role="form" aria-label="Analyze a Python project">
+            <label class="path-field">
+              <span class="sr-only">Project path</span>
+              <span class="path-icon" aria-hidden="true">~/</span>
+              <input id="project-path" type="text" autocomplete="off" placeholder="Path to a Python project" value="">
+            </label>
+            <button class="button button-secondary" id="demo-button" type="button">
+              <svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20V4H6.5A2.5 2.5 0 0 0 4 6.5v13Z"></path><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H20M8 8h8M8 12h8M8 16h5"></path></svg>
+              Load demo
+            </button>
+            <button class="button button-primary" id="analyze-button" type="button">
+              Analyze project <span aria-hidden="true">→</span>
+            </button>
+          </div>
+          <p class="form-hint"><span class="hint-dot" aria-hidden="true"></span> Nothing leaves your machine. Demo data is cached in this page.</p>
+        </section>
+
+        <div id="global-message" class="global-message" role="status" aria-live="polite" hidden></div>
+
+        <section id="results-section" class="results-section" aria-labelledby="results-heading" hidden>
+          <div class="results-heading-row">
+            <div>
+              <p class="section-kicker">02 / THE NOTEBOOK</p>
+              <h2 id="results-heading">A clearer read on risk</h2>
+            </div>
+            <div class="results-actions">
+              <span id="analysis-meta" class="mono-label"></span>
+              <button class="button button-quiet" id="refresh-button" type="button" title="Run this analysis again"><span aria-hidden="true">↻</span> Refresh</button>
+            </div>
+          </div>
+
+          <div id="summary-panel" class="summary-panel" aria-live="polite"></div>
+
+          <div class="toolbar" aria-label="Filter and sort alerts">
+            <div class="search-field">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 5 5"></path></svg>
+              <label class="sr-only" for="alert-search">Search alerts</label>
+              <input id="alert-search" type="search" placeholder="Search package, advisory, or symbol…" autocomplete="off">
+              <kbd>/</kbd>
+            </div>
+            <div class="filter-group" role="group" aria-label="Status filter">
+              <label class="sr-only" for="status-filter">Status</label>
+              <select id="status-filter">
+                <option value="all">All statuses</option>
+                <option value="REACHABLE">Reachable</option>
+                <option value="NOT_PROVEN_REACHABLE">Not proven</option>
+                <option value="UNKNOWN">Unknown</option>
+              </select>
+            </div>
+            <div class="filter-group" role="group" aria-label="Severity filter">
+              <label class="sr-only" for="severity-filter">Severity</label>
+              <select id="severity-filter">
+                <option value="all">All severity</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+            <div class="filter-group sort-group" role="group" aria-label="Sort alerts">
+              <label class="sr-only" for="sort-filter">Sort by</label>
+              <select id="sort-filter">
+                <option value="severity">Sort: severity</option>
+                <option value="status">Sort: status</option>
+                <option value="package">Sort: package</option>
+                <option value="advisory">Sort: advisory</option>
+              </select>
+            </div>
+            <button class="button button-quiet clear-filters" id="clear-filters" type="button">Clear</button>
+          </div>
+
+          <div class="alerts-card">
+            <div class="alerts-card-header">
+              <div><span class="section-kicker">ALERT INDEX</span><span id="alert-count" class="count-label"></span></div>
+              <div class="export-actions">
+                <button class="button button-quiet" id="export-markdown" type="button"><span aria-hidden="true">↓</span> Markdown</button>
+                <button class="button button-quiet" id="export-html" type="button"><span aria-hidden="true">↓</span> HTML report</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="alert-table">
+                <caption class="sr-only">Dependency security alerts and reachability findings</caption>
+                <thead>
+                  <tr><th scope="col">Dependency</th><th scope="col">Severity</th><th scope="col">Status</th><th scope="col">Advisory</th><th scope="col"><span class="sr-only">Open details</span></th></tr>
+                </thead>
+                <tbody id="alert-list"></tbody>
+              </table>
+            </div>
+            <div id="empty-alerts" class="empty-state" hidden>
+              <span class="empty-glyph" aria-hidden="true">⌕</span>
+              <h3>No alerts in this part of the notebook</h3>
+              <p>Try widening your filters or searching for a different package.</p>
+              <button class="button button-secondary" id="empty-clear" type="button">Show all alerts</button>
+            </div>
+          </div>
+          <p class="honesty-note"><span aria-hidden="true">✦</span> “Not proven reachable” is not the same as safe. It means the static evidence did not find a path.</p>
+        </section>
+
+        <section id="welcome-state" class="welcome-state" aria-labelledby="welcome-heading">
+          <div class="welcome-illustration" aria-hidden="true">
+            <div class="sketch-circle"></div><div class="sketch-path sketch-path-a"></div><div class="sketch-path sketch-path-b"></div><span>?</span>
+          </div>
+          <p class="section-kicker">A SMALL MOMENT OF CLARITY</p>
+          <h2 id="welcome-heading">Start with the demo,<br><em>follow the evidence.</em></h2>
+          <p>See a realistic mix of reachable, not-proven, and unknown findings. Each result carries its own reason, confidence, and code path.</p>
+          <button class="button button-primary" id="welcome-demo-button" type="button">Explore the demo <span aria-hidden="true">→</span></button>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <p><span class="footer-mark" aria-hidden="true">◌</span> Built for careful readers of noisy alerts.</p>
+        <p class="mono-label">reachable / local-first / v1</p>
+      </footer>
+    </div>
+
+    <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
+    <aside id="detail-drawer" class="detail-drawer" aria-labelledby="drawer-title" aria-hidden="true" tabindex="-1">
+      <div class="drawer-header">
+        <div><p class="section-kicker">ALERT DETAIL</p><p id="drawer-index" class="mono-label"></p></div>
+        <button id="close-drawer" class="icon-button" type="button" aria-label="Close alert details">×</button>
+      </div>
+      <div id="drawer-content" class="drawer-content"></div>
+    </aside>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

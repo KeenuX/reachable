@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools==75.6.0", "wheel==0.45.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reachable"
+version = "0.1.0"
+description = "Offline-first dependency alert reachability analyzer"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "reachable contributors" }]
+dependencies = [
+  "fastapi==0.115.6",
+  "uvicorn==0.34.0",
+]
+
+[project.optional-dependencies]
+test = [
+  "httpx==0.28.1",
+  "pytest==8.3.4",
+]
+
+[project.scripts]
+reachable = "reachable.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["reachable*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+  "e2e: exercises the future FastAPI application through its HTTP contract",
+  "security: checks implementation-level security invariants",
+]

@@ -1,0 +1,26 @@
+{
+  "GHSA-demo-reachable": {
+    "status": "REACHABLE",
+    "reason_code": "CALL_CHAIN_FOUND",
+    "confidence": "high",
+    "symbol_source": "osv_structured"
+  },
+  "PYSEC-demo-unused": {
+    "status": "NOT_PROVEN_REACHABLE",
+    "reason_code": "PACKAGE_NOT_IMPORTED",
+    "confidence": "high",
+    "symbol_source": "inferred_from_text"
+  },
+  "GHSA-demo-dynamic": {
+    "status": "UNKNOWN",
+    "reason_code": "DYNAMIC_CODE_BLOCKS_ANALYSIS",
+    "confidence": "low",
+    "symbol_source": "osv_structured"
+  },
+  "GHSA-demo-transitive": {
+    "status": "UNKNOWN",
+    "reason_code": "TRANSITIVE_DEPENDENCY",
+    "confidence": "low",
+    "symbol_source": "osv_structured"
+  }
+}

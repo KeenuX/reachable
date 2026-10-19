@@ -1,0 +1,156 @@
+{
+  "schema_version": "1.6.0",
+  "records": [
+    {
+      "id": "GHSA-demo-reachable",
+      "published": "2024-01-01T00:00:00Z",
+      "modified": "2024-01-02T00:00:00Z",
+      "summary": "Demo reachable function",
+      "details": "The affected function is `vulnerable_pkg.connect()`.",
+      "affected": [
+        {
+          "package": {
+            "ecosystem": "PyPI",
+            "name": "vulnerable-pkg"
+          },
+          "ranges": [
+            {
+              "type": "ECOSYSTEM",
+              "events": [
+                {
+                  "introduced": "0"
+                },
+                {
+                  "fixed": "2.0.0"
+                }
+              ]
+            }
+          ],
+          "database_specific": {
+            "affected_functions": [
+              "vulnerable_pkg.connect"
+            ]
+          }
+        }
+      ],
+      "references": [
+        {
+          "type": "ADVISORY",
+          "url": "https://osv.dev/vulnerability/GHSA-demo-reachable"
+        }
+      ]
+    },
+    {
+      "id": "PYSEC-demo-unused",
+      "published": "2024-01-01T00:00:00Z",
+      "modified": "2024-01-02T00:00:00Z",
+      "summary": "Demo unused package",
+      "details": "The affected module is `unused_pkg.reader`.",
+      "affected": [
+        {
+          "package": {
+            "ecosystem": "PyPI",
+            "name": "unrelated-pkg"
+          },
+          "ranges": [
+            {
+              "type": "ECOSYSTEM",
+              "events": [
+                {
+                  "introduced": "0"
+                },
+                {
+                  "fixed": "2.0.0"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "references": [
+        {
+          "type": "ADVISORY",
+          "url": "https://osv.dev/vulnerability/PYSEC-demo-unused"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-demo-dynamic",
+      "published": "2024-01-01T00:00:00Z",
+      "modified": "2024-01-02T00:00:00Z",
+      "summary": "Demo dynamic dispatch",
+      "details": "The affected function is `vulnerable_pkg.send()`.",
+      "affected": [
+        {
+          "package": {
+            "ecosystem": "PyPI",
+            "name": "vulnerable-pkg"
+          },
+          "ranges": [
+            {
+              "type": "ECOSYSTEM",
+              "events": [
+                {
+                  "introduced": "0"
+                },
+                {
+                  "fixed": "2.0.0"
+                }
+              ]
+            }
+          ],
+          "database_specific": {
+            "affected_functions": [
+              "vulnerable_pkg.send"
+            ]
+          }
+        }
+      ],
+      "references": [
+        {
+          "type": "ADVISORY",
+          "url": "https://osv.dev/vulnerability/GHSA-demo-dynamic"
+        }
+      ]
+    },
+    {
+      "id": "GHSA-demo-transitive",
+      "published": "2024-01-01T00:00:00Z",
+      "modified": "2024-01-02T00:00:00Z",
+      "summary": "Demo transitive dependency",
+      "details": "The affected function is `parent_pkg.wrapper.call()`.",
+      "affected": [
+        {
+          "package": {
+            "ecosystem": "PyPI",
+            "name": "parent-pkg"
+          },
+          "ranges": [
+            {
+              "type": "ECOSYSTEM",
+              "events": [
+                {
+                  "introduced": "0"
+                },
+                {
+                  "fixed": "2.0.0"
+                }
+              ]
+            }
+          ],
+          "database_specific": {
+            "affected_functions": [
+              "parent_pkg.wrapper.call"
+            ]
+          }
+        }
+      ],
+      "references": [
+        {
+          "type": "ADVISORY",
+          "url": "https://osv.dev/vulnerability/GHSA-demo-transitive"
+        }
+      ]
+    }
+  ]
+}

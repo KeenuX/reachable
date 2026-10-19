@@ -1,0 +1,14 @@
+{
+  "unusedlib": {
+    "symbols": ["unusedlib.dangerous"],
+    "source_url": "https://example.invalid/reachable-curated-symbols"
+  },
+  "dynamiclib": {
+    "symbols": ["dynamiclib.load"],
+    "source_url": "https://example.invalid/reachable-curated-symbols"
+  },
+  "transitivelib": {
+    "symbols": ["transitivelib.decode"],
+    "source_url": "https://example.invalid/reachable-curated-symbols"
+  }
+}

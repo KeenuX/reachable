@@ -1,0 +1,24 @@
+{
+  "DEMO-REACHABLE-ALIAS": {
+    "status": "REACHABLE",
+    "reason": "CALL_CHAIN_FOUND",
+    "symbol_source": "osv_structured"
+  },
+  "DEMO-REACHABLE-INSTANCE": {
+    "status": "REACHABLE",
+    "reason": "CALL_CHAIN_FOUND",
+    "symbol_source": "osv_structured"
+  },
+  "DEMO-NOT-IMPORTED": {
+    "status": "NOT_PROVEN_REACHABLE",
+    "reason": "PACKAGE_NOT_IMPORTED"
+  },
+  "DEMO-DYNAMIC": {
+    "status": "UNKNOWN",
+    "reason": "DYNAMIC_CODE_BLOCKS_ANALYSIS"
+  },
+  "DEMO-TRANSITIVE": {
+    "status": "UNKNOWN",
+    "reason": "TRANSITIVE_DEPENDENCY"
+  }
+}
