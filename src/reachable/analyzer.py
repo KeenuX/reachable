@@ -272,15 +272,25 @@ def _collect_calls(module: _Module) -> None:
 def _parse_project(root: Path, include_tests: bool) -> tuple[list[_Module], list[Evidence]]:
     modules: list[_Module] = []
     parse_errors: list[Evidence] = []
+    root = root.resolve()
     for path in sorted(root.rglob("*.py")):
-        relative_parts = path.relative_to(root).parts
+        # Do not follow source symlinks: a project must not make the scanner
+        # read files outside the requested analysis root.
+        if path.is_symlink():
+            continue
+        try:
+            resolved_path = path.resolve(strict=True)
+            resolved_path.relative_to(root)
+        except (OSError, ValueError):
+            continue
+        relative_parts = resolved_path.relative_to(root).parts
         if any(part in _SKIP_DIRS for part in relative_parts):
             continue
-        if not include_tests and ("tests" in relative_parts or path.name.startswith("test_")):
+        if not include_tests and ("tests" in relative_parts or resolved_path.name.startswith("test_")):
             continue
-        relative = path.relative_to(root).as_posix()
+        relative = resolved_path.relative_to(root).as_posix()
         try:
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=relative)
+            tree = ast.parse(resolved_path.read_text(encoding="utf-8"), filename=relative)
         except (SyntaxError, UnicodeDecodeError) as error:
             line = getattr(error, "lineno", 1) or 1
             detail = str(error).splitlines()[0] if str(error) else "unable to parse source"

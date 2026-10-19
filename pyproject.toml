@@ -31,6 +31,14 @@ package-dir = {"" = "src"}
 where = ["src"]
 include = ["reachable*"]
 
+[tool.setuptools.package-data]
+reachable = [
+  "assets/data/*.json",
+  "assets/fixtures/demo_app/*",
+  "assets/static/*",
+  "assets/static/vendor/*",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"

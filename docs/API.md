@@ -8,7 +8,7 @@ This document is the frontend/backend seam. The dashboard may use a mock with th
 - Paths are accepted only after normalization and containment checks. The analyzer must not follow a path outside the requested project root.
 - The analyzer never imports or executes source from the analyzed project.
 - Any subprocess invocation uses an argument list; `shell=True` is forbidden.
-- Error responses use `{"error": {"code": "...", "message": "..."}}`; messages must not include secrets or full environment dumps.
+- Error responses use `{"error": {"code": "...", "message": "..."}}`; messages must not include secrets or full environment dumps. Completed responses use `status: "completed"`.
 - `status` is one of `REACHABLE`, `NOT_PROVEN_REACHABLE`, or `UNKNOWN`.
 - `confidence` is one of `high`, `medium`, or `low`.
 - `symbol_source` is one of `osv_structured`, `curated_map`, `inferred_from_text`, or `none`.
@@ -33,7 +33,7 @@ A completed response has this shape:
 ```json
 {
   "analysis_id": "demo-001",
-  "status": "complete",
+  "status": "completed",
   "summary": {
     "total": 4,
     "reachable": 1,

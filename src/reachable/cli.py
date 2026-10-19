@@ -8,35 +8,46 @@ from pathlib import Path
 
 from .advisories import load_osv_cache
 from .analyzer import analyze_project
+from .config import setting
+
+PACKAGE_ASSETS = Path(__file__).resolve().parent / "assets"
 
 
 def _root() -> Path:
-    configured = os.environ.get("REACHABLE_PROJECT_ROOT")
+    configured = setting("REACHABLE_PROJECT_ROOT")
     candidates = [Path(configured).expanduser()] if configured else []
-    candidates.extend([Path.cwd(), Path(__file__).resolve().parents[2]])
+    candidates.extend([Path.cwd(), Path(__file__).resolve().parents[2], PACKAGE_ASSETS])
     for candidate in candidates:
+        candidate = candidate.resolve()
         if (candidate / "data").is_dir():
-            return candidate.resolve()
-    return Path.cwd().resolve()
+            return candidate
+    return PACKAGE_ASSETS
 
 
 def _scan(path: Path) -> int:
     root = path.expanduser().resolve()
     if not root.is_dir():
         raise SystemExit(f"project path is not a directory: {path}")
-    cache = Path(os.environ.get("REACHABLE_OSV_CACHE", str(_root() / "data" / "osv_cache.json")))
+    base = _root()
+    cache_value = setting("REACHABLE_OSV_CACHE")
+    cache = Path(cache_value).expanduser() if cache_value else base / "data" / "osv_cache.json"
     advisories = load_osv_cache(cache)
-    symbol_map = _root() / "data" / "symbol_map.json"
+    symbol_map = base / "data" / "symbol_map.json"
     dependencies = None
-    if root == (_root() / "fixtures" / "demo_app").resolve():
+    if root == (base / "fixtures" / "demo_app").resolve():
         dependencies = {"transitivelib": {"direct": False}}
     result = analyze_project(
         root,
         advisories,
-        symbol_map_path=symbol_map if symbol_map.is_file() else None,
+        symbol_map_path=symbol_map if symbol_map.is_file() and not symbol_map.is_symlink() else None,
         dependencies=dependencies,
     )
-    print(json.dumps(result.to_dict(), indent=2))
+    payload = result.to_dict()
+    try:
+        payload["project_root"] = root.relative_to(base).as_posix()
+    except ValueError:
+        payload["project_root"] = root.name or "project"
+    print(json.dumps(payload, indent=2))
     return 1 if result.summary["reachable"] else 0
 
 
@@ -46,12 +57,15 @@ def main() -> int:
     scan = subparsers.add_parser("scan", help="scan a Python project")
     scan.add_argument("path", type=Path)
     serve = subparsers.add_parser("serve", help="serve the local dashboard")
-    serve.add_argument("--demo", action="store_true", help="start with the offline demo")
-    serve.add_argument("--port", type=int, default=int(os.environ.get("REACHABLE_PORT", "8000")))
+    serve.add_argument("--demo", action="store_true", help="use the bundled offline demo assets")
+    serve.add_argument("--port", type=int, default=int(setting("REACHABLE_PORT", "8000") or "8000"))
     args = parser.parse_args()
     if args.command == "scan":
         return _scan(args.path)
+    if args.demo:
+        os.environ["REACHABLE_DEMO"] = "1"
     import uvicorn
+
     uvicorn.run("reachable.api:app", host="127.0.0.1", port=args.port, reload=False)
     return 0
 

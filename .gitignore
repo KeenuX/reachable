@@ -26,3 +26,8 @@ dist/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local source briefs kept outside the public repository
+design.md
+plan.md
+prompt.md

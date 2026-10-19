@@ -47,7 +47,7 @@ The server is expected to bind to `127.0.0.1` and serve the dashboard at `http:/
 make test
 ```
 
-The contract and fixture checks run without the application implementation. HTTP, end-to-end, export, and implementation-security checks discover the future `reachable` package and skip with an explicit reason until its interfaces exist. Once the FastAPI app is present, those checks exercise it through `TestClient`.
+The test suite covers the analyzer, API, end-to-end demo, exports, security invariants, packaging contracts, and static frontend checks.
 
 ## Build
 
@@ -64,7 +64,7 @@ docker build --tag reachable:dev .
 docker run --rm --network host reachable:dev
 ```
 
-The host-network command keeps the documented loopback-only bind usable on Linux. To expose the service through Docker's port mapping instead, the eventual server entry point must provide an explicitly documented container bind override; do not change the default loopback bind.
+The container keeps the service on loopback inside the container. On Linux, `--network host` makes that loopback address available on the host. Docker is optional; local Python setup is the primary workflow.
 
 ## Deploy
 
@@ -77,7 +77,7 @@ For a local deployment, use the image above and keep it reachable only from the 
 3. Python files are parsed with `ast`; imports, aliases, attributes, basic instances, routes, and module-level entry points form a conservative call graph.
 4. Dynamic dispatch is surfaced as uncertainty. Every reachable claim includes file-and-line evidence for each hop.
 
-The public HTTP shapes are in [docs/API.md](docs/API.md), and OSV field observations and resolution rules are in [docs/OSV_NOTES.md](docs/OSV_NOTES.md).
+The public HTTP shapes are in [docs/API.md](docs/API.md), and OSV field observations and resolution rules are in [docs/OSV_NOTES.md](docs/OSV_NOTES.md). The published wheel includes the dashboard, offline OSV cache, symbol map, and demo fixture.
 
 ## Limitations
 
@@ -85,4 +85,12 @@ Static analysis cannot see all dynamic code. `NOT_PROVEN_REACHABLE` does not mea
 
 ## Project checks
 
-The reproducibility layer owns `pyproject.toml`, `requirements.lock`, `.python-version`, `Dockerfile`, `Makefile`, `.env.example`, `README.md`, `docs/`, and `tests/`. Implementation and static frontend files are intentionally outside this layer.
+The canonical commands are:
+
+```sh
+make test
+make build
+reachable serve --demo
+```
+
+The source brief files are intentionally kept out of the public repository. Runtime assets are packaged into the wheel so the installed CLI remains functional outside the source checkout.

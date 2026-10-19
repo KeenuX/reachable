@@ -1,0 +1,43 @@
+{
+  "vulnerabilities": [
+    {
+      "id": "DEMO-REACHABLE-ALIAS",
+      "aliases": ["GHSA-demo-alias"],
+      "summary": "Demo parser advisory",
+      "details": "The vulnerable callable is `dangerouslib.parse()`.",
+      "affected": [
+        {
+          "package": {"ecosystem": "PyPI", "name": "dangerouslib"},
+          "ranges": [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}, {"fixed": "9"}]}]
+        }
+      ],
+      "database_specific": {"affected_functions": ["dangerouslib.parse"]},
+      "references": [{"type": "WEB", "url": "https://example.invalid/DEMO-REACHABLE-ALIAS"}]
+    },
+    {
+      "id": "DEMO-REACHABLE-INSTANCE",
+      "summary": "Demo client advisory",
+      "details": "The vulnerable callable is `dangerouslib.Client.load()`.",
+      "affected": [{"package": {"ecosystem": "PyPI", "name": "dangerouslib"}}],
+      "database_specific": {"affected_functions": ["dangerouslib.Client.load"]}
+    },
+    {
+      "id": "DEMO-NOT-IMPORTED",
+      "summary": "Unused demo advisory",
+      "details": "The vulnerable callable is `unusedlib.dangerous()`.",
+      "affected": [{"package": {"ecosystem": "PyPI", "name": "unusedlib"}}]
+    },
+    {
+      "id": "DEMO-DYNAMIC",
+      "summary": "Dynamic loader advisory",
+      "details": "The vulnerable callable is `dynamiclib.load()`.",
+      "affected": [{"package": {"ecosystem": "PyPI", "name": "dynamiclib"}}]
+    },
+    {
+      "id": "DEMO-TRANSITIVE",
+      "summary": "Transitive demo advisory",
+      "details": "The vulnerable callable is `transitivelib.decode()`.",
+      "affected": [{"package": {"ecosystem": "PyPI", "name": "transitivelib"}}]
+    }
+  ]
+}
