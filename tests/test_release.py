@@ -20,7 +20,7 @@ def test_demo_api_is_stable_and_does_not_leak_machine_paths():
     assert payload["summary"] == {"total": 5, "reachable": 2, "not_proven_reachable": 1, "unknown": 2}
     assert payload["project_path"] == "fixtures/demo_app"
     serialized = json.dumps(payload)
-    assert "/c/Users" not in serialized
+    assert str(ROOT.resolve()) not in serialized
     assert "OneDrive" not in serialized
 
 
