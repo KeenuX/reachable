@@ -56,6 +56,30 @@ To provide offline advisories, include one of these in the selected project:
 
 Alternatively set `REACHABLE_OSV_CACHE` to a local cached OSV JSON file. If no inventory is supplied, reachable returns a completed empty result and explains that no advisory inventory was provided; it never applies the demo cache to an unrelated project.
 
+### Try the prepared Desktop sample
+
+A small sample folder named `reachable-test` has been created on the Desktop for this workspace. It is outside the repository so it can be selected like a real user project. In the dashboard:
+
+1. Click **Choose folder**.
+2. Select the Desktop folder named `reachable-test`.
+3. Click **Analyze folder**.
+
+The sample contains `app.py`, `dynamic.py`, `requirements.txt`, `pyproject.toml`, and `osv_records.json`. It intentionally produces all three classifications:
+
+- `LOCAL-REACHABLE-001`: `REACHABLE` — `__main__` -> `main` -> `demo_pkg.vulnerable`.
+- `LOCAL-NOT-PROVEN-002`: `NOT_PROVEN_REACHABLE` — `unused-pkg` is declared but never imported.
+- `LOCAL-UNKNOWN-003`: `UNKNOWN` — dynamic `getattr` dispatch blocks a reliable conclusion.
+
+The expected summary is **3 alerts: 1 reachable, 1 not proven reachable, 1 unknown**. The packages are fictional and do not need to be installed because reachable analyzes source and offline advisory data only.
+
+For a same-machine CLI check, replace the placeholder with the actual path to your Desktop sample:
+
+```sh
+reachable scan "/path/to/Desktop/reachable-test"
+```
+
+A reachable finding makes the CLI exit with status `1`; that is expected for this sample.
+
 ## Test
 
 `make test` is the one canonical test command:
