@@ -35,7 +35,7 @@ def test_dashboard_exposes_folder_scope_controls_and_neo_brutalist_tokens():
     assert 'id="project-path"' in markup
     assert "scan_subfolders" in script
     assert "--coral" in styles
-    assert "box-shadow: 8px 8px 0" in styles
+    assert "--shadow: 8px 8px 0" in styles
     assert "border: 3px solid" in styles
 
 
