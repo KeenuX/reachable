@@ -82,7 +82,7 @@ def main() -> int:
         os.environ["REACHABLE_DEMO"] = "1"
     import uvicorn
 
-    uvicorn.run("reachable.api:app", host="127.0.0.1", port=args.port, reload=False) #host="0.0.0.0"
+    uvicorn.run("reachable.api:app", host="127.0.0.1", port=args.port, reload=False)
     return 0
 
 
