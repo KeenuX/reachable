@@ -56,6 +56,7 @@ DEFAULT_MAX_UPLOAD_FILES = 1000
 class AnalyzeRequest(BaseModel):
     path: str = Field(min_length=1, max_length=4096)
     include_tests: bool = False
+    scan_subfolders: bool = True
 
 
 def _integer_setting(name: str, default: int) -> int:
@@ -153,8 +154,13 @@ def _dependencies(
     demo: bool = False,
     *,
     include_tests: bool = False,
+    scan_subfolders: bool = True,
 ) -> dict[str, Any]:
-    result = build_analysis_dependencies(project, include_tests=include_tests)
+    result = build_analysis_dependencies(
+        project,
+        include_tests=include_tests,
+        scan_subfolders=scan_subfolders,
+    )
     if demo:
         result.update({
             "transitivelib": {"direct": False, "declared": False, "sources": ["demo"]},
@@ -256,9 +262,16 @@ def _run_analysis(
     demo: bool = False,
     *,
     display_path: str | None = None,
+    scan_subfolders: bool = True,
 ) -> dict[str, Any]:
     all_records, record_source = _load_records_with_source(project, demo=demo)
-    dependencies = _dependencies(project, all_records, demo, include_tests=include_tests)
+    dependencies = _dependencies(
+        project,
+        all_records,
+        demo,
+        include_tests=include_tests,
+        scan_subfolders=scan_subfolders,
+    )
     if demo:
         records = all_records
     elif record_source == "project":
@@ -275,6 +288,7 @@ def _run_analysis(
         symbol_map_path=symbol_map if symbol_map.is_file() and not symbol_map.is_symlink() else None,
         dependencies=dependencies,
         include_tests=include_tests,
+        scan_subfolders=scan_subfolders,
     )
     analysis_id = uuid.uuid4().hex
     payload = _result_payload(
@@ -416,17 +430,32 @@ def _safe_upload_name(filename: str) -> tuple[str, ...]:
     return parts
 
 
-def _parse_upload(content_type: str | None, body: bytes) -> tuple[list[tuple[tuple[str, ...], bytes]], bool]:
+def _parse_form_bool(payload: bytes, *, default: bool) -> bool:
+    value = payload.decode("utf-8", "replace").strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _parse_upload(
+    content_type: str | None,
+    body: bytes,
+) -> tuple[list[tuple[tuple[str, ...], bytes]], bool, bool]:
     if not content_type:
         raise HTTPException(status_code=400, detail="Upload content type is missing")
     files: list[tuple[tuple[str, ...], bytes]] = []
     include_tests = False
+    scan_subfolders = True
     max_files = _integer_setting("REACHABLE_MAX_UPLOAD_FILES", DEFAULT_MAX_UPLOAD_FILES)
     max_file_bytes = _integer_setting("REACHABLE_MAX_UPLOAD_FILE_BYTES", DEFAULT_MAX_UPLOAD_FILE_BYTES)
     for field_name, filename, payload in _multipart_parts(content_type, body):
         if filename is None:
             if field_name == "include_tests":
-                include_tests = payload.decode("utf-8", "replace").strip().lower() in {"1", "true", "yes", "on"}
+                include_tests = _parse_form_bool(payload, default=False)
+            elif field_name == "scan_subfolders":
+                scan_subfolders = _parse_form_bool(payload, default=True)
             continue
         if len(files) >= max_files:
             raise HTTPException(status_code=413, detail="Too many uploaded files")
@@ -435,7 +464,7 @@ def _parse_upload(content_type: str | None, body: bytes) -> tuple[list[tuple[tup
         files.append((_safe_upload_name(filename), payload))
     if not files:
         raise HTTPException(status_code=400, detail="At least one project file is required")
-    return files, include_tests
+    return files, include_tests, scan_subfolders
 
 
 def _write_upload(temp_root: Path, files: list[tuple[tuple[str, ...], bytes]]) -> None:
@@ -521,17 +550,26 @@ def demo() -> dict[str, Any]:
 @app.post("/api/analyze")
 def analyze(request: AnalyzeRequest) -> dict[str, Any]:
     project = _safe_path(request.path)
-    return _run_analysis(project, request.include_tests)
+    return _run_analysis(
+        project,
+        request.include_tests,
+        scan_subfolders=request.scan_subfolders,
+    )
 
 
 async def _analyze_upload(request: Request) -> dict[str, Any]:
     body = await _request_body(request)
-    files, include_tests = _parse_upload(request.headers.get("content-type"), body)
+    files, include_tests, scan_subfolders = _parse_upload(request.headers.get("content-type"), body)
     with tempfile.TemporaryDirectory(prefix="reachable-upload-") as directory:
         temp_root = Path(directory)
         _write_upload(temp_root, files)
         project = _uploaded_project_root(temp_root)
-        return _run_analysis(project, include_tests, display_path="uploaded-project")
+        return _run_analysis(
+            project,
+            include_tests,
+            display_path="uploaded-project",
+            scan_subfolders=scan_subfolders,
+        )
 
 
 @app.post("/api/analyze/upload")

@@ -43,6 +43,14 @@ The server is expected to bind to `127.0.0.1` and serve the dashboard at `http:/
 
 Use **Choose folder** in the dashboard to open your operating system's folder picker. The browser uploads supported Python source and project metadata to the local server; the server stores it in a temporary directory, analyzes it without importing or executing it, and removes it before returning the result. This is the portable workflow when the dashboard is running inside Docker.
 
+The selected browser-visible folder name is written into the project path bar.
+Browsers intentionally do not expose the absolute local path to page scripts,
+so the interface shows the safe folder name rather than inventing a path. The
+**Scan nested folders** option is enabled by default. Leave it enabled to
+inspect `src/`, package, and other nested directories; turn it off to inspect
+only files directly below the selected root. The same option is sent with typed
+path analysis and folder uploads.
+
 For a same-machine checkout, you can also type its path into the path field or use the CLI:
 
 ```sh

@@ -22,11 +22,12 @@ Request:
 ```json
 {
   "path": "./fixtures/demo_app",
-  "include_tests": false
+  "include_tests": false,
+  "scan_subfolders": true
 }
 ```
 
-`path` is required and must be a local project directory. `include_tests` defaults to `false`. Demo mode may additionally accept `{"demo": true}` and must use repository fixtures without network access.
+`path` is required and must be a local project directory. `include_tests` defaults to `false`. `scan_subfolders` defaults to `true`; set it to `false` to inspect only root-level Python files and dependency metadata. Demo mode may additionally accept `{"demo": true}` and must use repository fixtures without network access.
 
 For an arbitrary project, `osv_records.json` at the project root is the
 authoritative offline advisory inventory. The file may be an OSV record list,
@@ -131,6 +132,14 @@ absolute temporary path is included in the result. A filename that is
 absolute, contains `..` path traversal, or resolves outside the temporary
 project root returns HTTP 400 with the common `invalid_request` error envelope;
 no file may be written outside that root.
+
+The optional multipart field `scan_subfolders` defaults to `true`. When it is
+`false`, the browser sends only supported files directly below the selected
+folder root and the analyzer ignores nested Python files and nested dependency
+metadata. When it is `true`, supported files below nested folders are included.
+The dashboard shows the selected browser-visible folder name in the path bar;
+browsers do not expose an absolute local path to page JavaScript, so the UI
+does not fabricate one.
 
 `POST /api/upload` may be exposed as a compatibility alias with the same
 contract; `/api/analyze/upload` is canonical.

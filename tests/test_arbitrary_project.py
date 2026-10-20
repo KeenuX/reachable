@@ -79,6 +79,88 @@ def _analysis(client, project: Path) -> dict:
     return payload
 
 
+def _nested_vulnerable_project(root: Path) -> Path:
+    advisory = _record("NESTED-001", "nested-pkg", "nested_pkg.vulnerable")
+    project = _write_project(
+        root,
+        source="# root-level source remains part of the scan\n",
+        records=[advisory],
+        requirements="nested-pkg==1.0.0\n",
+    )
+    nested = project / "nested"
+    nested.mkdir()
+    (nested / "vulnerable.py").write_text(
+        "from nested_pkg import vulnerable\n\nvulnerable()\n",
+        encoding="utf-8",
+    )
+    return project
+
+
+def test_json_scan_subfolders_defaults_true_and_can_exclude_nested_source(client, tmp_path):
+    project = _nested_vulnerable_project(tmp_path / "json-scan-project")
+
+    default_response = client.post("/api/analyze", json={"path": str(project)})
+    assert default_response.status_code == 200, default_response.text
+    default_finding = default_response.json()["alerts"][0]
+    assert default_finding["status"] == "REACHABLE"
+    assert default_finding["reason_code"] == "CALL_CHAIN_FOUND"
+    assert any(item["file"] == "nested/vulnerable.py" for item in default_finding["evidence"])
+
+    excluded_response = client.post(
+        "/api/analyze",
+        json={"path": str(project), "scan_subfolders": False},
+    )
+    assert excluded_response.status_code == 200, excluded_response.text
+    excluded_finding = excluded_response.json()["alerts"][0]
+    assert excluded_finding["status"] == "NOT_PROVEN_REACHABLE"
+    assert excluded_finding["reason_code"] == "PACKAGE_NOT_IMPORTED"
+    assert excluded_finding["installed_version"] == "1.0.0"
+    assert all(item["file"] != "nested/vulnerable.py" for item in excluded_finding["evidence"])
+
+
+@pytest.mark.parametrize("scan_subfolders", [None, "true", "false"])
+def test_multipart_scan_subfolders_controls_nested_source(
+    client, tmp_path, scan_subfolders
+):
+    advisory = _record("UPLOAD-NESTED-001", "uploaded-nested-pkg", "uploaded_nested_pkg.vulnerable")
+    files = [
+        (
+            "files",
+            ("project/app.py", b"# root-level source\n", "text/x-python"),
+        ),
+        (
+            "files",
+            (
+                "project/nested/vulnerable.py",
+                b"from uploaded_nested_pkg import vulnerable\n\nvulnerable()\n",
+                "text/x-python",
+            ),
+        ),
+        (
+            "files",
+            ("project/requirements.txt", b"uploaded-nested-pkg==1.0.0\n", "text/plain"),
+        ),
+        (
+            "files",
+            ("project/osv_records.json", json.dumps([advisory]).encode("utf-8"), "application/json"),
+        ),
+    ]
+    form_data = {} if scan_subfolders is None else {"scan_subfolders": scan_subfolders}
+
+    response = client.post("/api/analyze/upload", data=form_data, files=files)
+
+    assert response.status_code == 200, response.text
+    finding = response.json()["alerts"][0]
+    if scan_subfolders == "false":
+        assert finding["status"] == "NOT_PROVEN_REACHABLE"
+        assert finding["reason_code"] == "PACKAGE_NOT_IMPORTED"
+        assert all(item["file"] != "nested/vulnerable.py" for item in finding["evidence"])
+    else:
+        assert finding["status"] == "REACHABLE"
+        assert finding["reason_code"] == "CALL_CHAIN_FOUND"
+        assert any(item["file"] == "nested/vulnerable.py" for item in finding["evidence"])
+
+
 @pytest.mark.parametrize("cache_shape", ["list", "vulnerabilities", "records"])
 def test_arbitrary_project_loads_each_supported_local_osv_cache_shape(
     client, tmp_path, cache_shape

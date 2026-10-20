@@ -23,6 +23,20 @@ def test_api_contract_documents_required_routes_and_invariants():
         assert value in contract
     assert "127.0.0.1" in contract
     assert "shell=True" in contract
+    assert "scan_subfolders" in contract
+
+
+def test_dashboard_exposes_folder_scope_controls_and_neo_brutalist_tokens():
+    markup = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+    script = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+    styles = (ROOT / "static" / "styles.css").read_text(encoding="utf-8")
+    assert 'id="folder-input"' in markup
+    assert 'id="scan-subfolders"' in markup
+    assert 'id="project-path"' in markup
+    assert "scan_subfolders" in script
+    assert "--coral" in styles
+    assert "box-shadow: 8px 8px 0" in styles
+    assert "border: 3px solid" in styles
 
 
 def test_demo_ground_truth_covers_required_statuses_and_uncertainty():

@@ -151,9 +151,13 @@ def _read_requirements_file(
     root: Path,
     dependencies: dict[str, dict[str, Any]],
     seen: set[Path],
+    *,
+    scan_subfolders: bool = True,
 ) -> None:
     resolved = _safe_file(path, root)
     if resolved is None or resolved in seen:
+        return
+    if not scan_subfolders and len(resolved.relative_to(root).parts) > 1:
         return
     seen.add(resolved)
     try:
@@ -166,7 +170,13 @@ def _read_requirements_file(
         if include_match or constraint_match:
             included = include_match or constraint_match
             include_path = (resolved.parent / included.group(1).strip()).resolve()
-            _read_requirements_file(include_path, root, dependencies, seen)
+            _read_requirements_file(
+                include_path,
+                root,
+                dependencies,
+                seen,
+                scan_subfolders=scan_subfolders,
+            )
             continue
         parts = _requirement_parts(line)
         if parts:
@@ -233,7 +243,11 @@ def _setup_py_dependencies(root: Path, dependencies: dict[str, dict[str, Any]]) 
                             _dependency_value(dependencies, parts[0], specifier=parts[1], source="setup.py", optional=True)
 
 
-def discover_dependencies(project_root: str | os.PathLike[str]) -> dict[str, dict[str, Any]]:
+def discover_dependencies(
+    project_root: str | os.PathLike[str],
+    *,
+    scan_subfolders: bool = True,
+) -> dict[str, dict[str, Any]]:
     """Read dependency declarations without importing or executing a project.
 
     The returned values retain the source and exact pinned version when the
@@ -319,10 +333,11 @@ def discover_dependencies(project_root: str | os.PathLike[str]) -> dict[str, dic
                                 optional=True,
                             )
 
-    for path in sorted(root.rglob("requirements*.txt")):
+    requirement_paths = root.rglob("requirements*.txt") if scan_subfolders else root.glob("requirements*.txt")
+    for path in sorted(requirement_paths):
         if any(part in _SKIP_DIRS for part in path.relative_to(root).parts):
             continue
-        _read_requirements_file(path, root, dependencies, set())
+        _read_requirements_file(path, root, dependencies, set(), scan_subfolders=scan_subfolders)
 
     setup_cfg = _safe_file(root / "setup.cfg", root)
     if setup_cfg is not None:
@@ -628,11 +643,17 @@ def _collect_calls(module: _Module) -> None:
         )
 
 
-def _parse_project(root: Path, include_tests: bool) -> tuple[list[_Module], list[Evidence]]:
+def _parse_project(
+    root: Path,
+    include_tests: bool,
+    *,
+    scan_subfolders: bool = True,
+) -> tuple[list[_Module], list[Evidence]]:
     modules: list[_Module] = []
     parse_errors: list[Evidence] = []
     root = root.resolve()
-    for path in sorted(root.rglob("*.py")):
+    python_paths = root.rglob("*.py") if scan_subfolders else root.glob("*.py")
+    for path in sorted(python_paths):
         # Do not follow source symlinks: a project must not make the scanner
         # read files outside the requested analysis root.
         if path.is_symlink():
@@ -675,6 +696,7 @@ def build_analysis_dependencies(
     project_root: str | os.PathLike[str],
     *,
     include_tests: bool = False,
+    scan_subfolders: bool = True,
 ) -> dict[str, dict[str, Any]]:
     """Combine declared dependencies with imports without executing code.
 
@@ -683,8 +705,12 @@ def build_analysis_dependencies(
     keep them as unknown-directness so a local advisory can still be analyzed.
     """
     root = Path(project_root).resolve()
-    dependencies = discover_dependencies(root)
-    imported = discover_imported_packages(root, include_tests=include_tests)
+    dependencies = discover_dependencies(root, scan_subfolders=scan_subfolders)
+    imported = discover_imported_packages(
+        root,
+        include_tests=include_tests,
+        scan_subfolders=scan_subfolders,
+    )
     has_declarations = bool(dependencies)
     for package in imported:
         if any(_package_key(str(name)) == package for name in dependencies):
@@ -705,13 +731,14 @@ def discover_imported_packages(
     project_root: str | os.PathLike[str],
     *,
     include_tests: bool = False,
+    scan_subfolders: bool = True,
 ) -> set[str]:
     """Return normalized top-level imports found by the AST scanner."""
 
     root = Path(project_root).resolve()
     if not root.is_dir():
         return set()
-    modules, _ = _parse_project(root, include_tests)
+    modules, _ = _parse_project(root, include_tests, scan_subfolders=scan_subfolders)
     return {
         package
         for module in modules
@@ -855,6 +882,7 @@ def analyze_project(
     symbol_map_path: str | os.PathLike[str] | None = None,
     dependencies: Mapping[str, Any] | None = None,
     include_tests: bool = False,
+    scan_subfolders: bool = True,
     console_scripts: Mapping[str, str] | None = None,
 ) -> AnalysisResult:
     """Analyze Python source against normalized or raw offline OSV records."""
@@ -862,9 +890,13 @@ def analyze_project(
     root = Path(project_root).resolve()
     if not root.is_dir():
         raise ValueError(f"project root is not a directory: {project_root}")
-    modules, parse_errors = _parse_project(root, include_tests)
+    modules, parse_errors = _parse_project(root, include_tests, scan_subfolders=scan_subfolders)
     if dependencies is None:
-        dependencies = build_analysis_dependencies(root, include_tests=include_tests)
+        dependencies = build_analysis_dependencies(
+            root,
+            include_tests=include_tests,
+            scan_subfolders=scan_subfolders,
+        )
     if console_scripts is None:
         console_scripts = discover_console_scripts(root)
     dynamic = [evidence for module in modules for evidence in module.dynamic]
