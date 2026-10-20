@@ -161,6 +161,60 @@ def test_multipart_scan_subfolders_controls_nested_source(
         assert any(item["file"] == "nested/vulnerable.py" for item in finding["evidence"])
 
 
+def test_multipart_nested_scan_unwraps_folder_with_pip_audit_inventory(client):
+    files = [
+        (
+            "files",
+            (
+                "project/package/__init__.py",
+                b"",
+                "text/x-python",
+            ),
+        ),
+        (
+            "files",
+            (
+                "project/package/entry.py",
+                b"from package.helper import run\n\nif __name__ == \"__main__\":\n    run()\n",
+                "text/x-python",
+            ),
+        ),
+        (
+            "files",
+            (
+                "project/package/helper.py",
+                b"from uploaded_nested_pkg import vulnerable\n\ndef run():\n    vulnerable()\n",
+                "text/x-python",
+            ),
+        ),
+        (
+            "files",
+            (
+                "project/pip-audit.json",
+                json.dumps([{
+                    "name": "uploaded-nested-pkg",
+                    "version": "1.0.0",
+                    "id": "UPLOAD-PIP-AUDIT-NESTED-001",
+                    "description": "The vulnerable callable is `uploaded_nested_pkg.vulnerable`.",
+                }]).encode("utf-8"),
+                "application/json",
+            ),
+        ),
+    ]
+
+    response = client.post("/api/analyze/upload", files=files)
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["advisory_source"] == "project"
+    finding = payload["alerts"][0]
+    assert finding["advisory_id"] == "UPLOAD-PIP-AUDIT-NESTED-001"
+    assert finding["status"] == "REACHABLE"
+    assert finding["reason_code"] == "CALL_CHAIN_FOUND"
+    assert any(item["file"] == "package/entry.py" for item in finding["evidence"])
+    assert any(item["file"] == "package/helper.py" for item in finding["evidence"])
+
+
 @pytest.mark.parametrize("cache_shape", ["list", "vulnerabilities", "records"])
 def test_arbitrary_project_loads_each_supported_local_osv_cache_shape(
     client, tmp_path, cache_shape

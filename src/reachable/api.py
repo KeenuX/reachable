@@ -508,7 +508,15 @@ def _uploaded_project_root(temp_root: Path) -> Path:
     if len(entries) != 1 or not entries[0].is_dir():
         return temp_root
     nested = entries[0]
-    markers = {"pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "osv_records.json", "osv.json"}
+    markers = {
+        "pyproject.toml",
+        "setup.py",
+        "setup.cfg",
+        "requirements.txt",
+        "osv_records.json",
+        "osv.json",
+        "pip-audit.json",
+    }
     if any((nested / marker).is_file() for marker in markers) or any(nested.glob("requirements*.txt")):
         return nested
     return temp_root
